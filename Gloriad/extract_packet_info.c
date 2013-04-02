@@ -240,7 +240,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	memset(dstip_buf, 0, 256);
 	strcpy(srcip_buf, inet_ntoa(src_ip));
 	strcpy(dstip_buf, inet_ntoa(dst_ip));
-	printf("%f\t%s\t%s\t%d\n", ts, srcip_buf, dstip_buf, tcp_synack);
+	printf("%f\t%s\t%02x\t%s\t%02x\t%d\n", ts, srcip_buf, ntohl(src_ip.s_addr), dstip_buf, ntohl(dst_ip.s_addr), tcp_synack);
 }
 
 static void usage(char *argv0)
@@ -268,7 +268,7 @@ void print_all_ip_statsinfo()
   for(mit= ip_records.begin(); mit != ip_records.end(); mit++)
   {
     ip_addr.s_addr = mit->first;
-    printf("%s\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\n", inet_ntoa(ip_addr),(mit->second)._tcp_synack_event,(mit->second)._pair_event, (mit->second)._srccount, (mit->second)._dstcount, (mit->second)._srcbytes, (mit->second)._dstbytes );
+    printf("%02x\t%s\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\n", ntohl(ip_addr.s_addr),inet_ntoa(ip_addr),(mit->second)._tcp_synack_event,(mit->second)._pair_event, (mit->second)._srccount, (mit->second)._dstcount, (mit->second)._srcbytes, (mit->second)._dstbytes );
 
   }
 }

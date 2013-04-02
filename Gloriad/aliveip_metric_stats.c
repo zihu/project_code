@@ -47,15 +47,24 @@ struct stat_info
   unsigned long _dstcount;
   unsigned long _srcbytes;
   unsigned long _dstbytes;
+  set<unsigned long> _uniq_end_set;
+  set<unsigned long> _uniq_dst_set;
+  set<unsigned long> _uniq_src_set;
 };
 
 list<ts_src_dst> interval_packets;
 set<unsigned long> alive_ip_set;
 map<unsigned long, stat_info> ip_records;
-
+//map<unsigned long, set<unsigned long> > srcip_uniq_ips;
+//map<unsigned long, set<unsigned long> > dstip_uniq_ips; 
 
 void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, bool is_pair, unsigned short bytes)
 {
+
+  set<unsigned long>::iterator uniq_endset_sit;
+  set<unsigned long>* uniq_end_set;
+  //update dst -> source set
+
   struct stat_info temp_record;
   map<unsigned long, stat_info>::iterator mit;
   //update src ip record;
@@ -68,15 +77,29 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
       (mit->second)._tcp_synack_event += 1;
     if(is_pair)
       (mit->second)._pair_event += 1;
+    //update src -> unique destination set
+    ((mit->second)._uniq_end_set).insert(dst);
+    ((mit->second)._uniq_dst_set).insert(dst);
+
+
+    /*
+    uniq_end_set = &((mit->second)._uniq_end_set);
+    uniq_endset_sit = uniq_end_set->find(dst);
+    if(uniq_endset_sit == uniq_end_set->end())
+    {
+      uniq_end_set->insert(dst);
+    }
+    */
+
   }
   else
   {
-    memset(&temp_record,0, sizeof(temp_record));
     temp_record._srccount = 1;
     temp_record._dstcount = 0;
     temp_record._srcbytes = bytes;
     temp_record._dstbytes = 0;
-
+    (temp_record._uniq_end_set).insert(dst);
+    (temp_record._uniq_dst_set).insert(dst);
     if(is_typsynack)
       temp_record._tcp_synack_event = 1;
     else
@@ -95,16 +118,20 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
   {
     (mit->second)._dstcount += 1;
     (mit->second)._dstbytes += bytes;
+    //update dst -> source set
+    ((mit->second)._uniq_end_set).insert(src);
+    ((mit->second)._uniq_src_set).insert(src);
   }
   else
   {
-    memset(&temp_record,0, sizeof(temp_record));
     temp_record._srccount = 0;
     temp_record._dstcount = 1;
     temp_record._srcbytes = 0;
     temp_record._dstbytes = bytes;
     temp_record._tcp_synack_event = 0;
     temp_record._pair_event = 0;
+    (temp_record._uniq_end_set).insert(src);
+    (temp_record._uniq_src_set).insert(src);
     ip_records.insert(pair<unsigned long, stat_info>(dst, temp_record));
   }
 
@@ -297,6 +324,11 @@ void print_all_alive_ip()
   }
 }
 
+  set<unsigned long> _uniq_end_set;
+  set<unsigned long> _uniq_dst_set;
+  set<unsigned long> _uniq_src_set;
+
+
 void print_all_ip_statsinfo()
 {
   map<unsigned long, stat_info>::iterator mit;
@@ -304,8 +336,7 @@ void print_all_ip_statsinfo()
   for(mit= ip_records.begin(); mit != ip_records.end(); mit++)
   {
     ip_addr.s_addr = mit->first;
-    printf("%s\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\n", inet_ntoa(ip_addr),(mit->second)._tcp_synack_event,(mit->second)._pair_event, (mit->second)._srccount, (mit->second)._dstcount, (mit->second)._srcbytes, (mit->second)._dstbytes );
-
+    printf("%02x\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\n", ntohl(ip_addr.s_addr),(mit->second)._tcp_synack_event,(mit->second)._pair_event, (mit->second)._srccount, (mit->second)._dstcount, (mit->second)._srcbytes, (mit->second)._dstbytes, ((mit->second)._uniq_end_set).size(), ((mit->second)._uniq_dst_set).size(), ((mit->second)._uniq_src_set).size());
   }
 }
 
@@ -398,8 +429,12 @@ int main(int argc, char *argv[])
 
 
 	//print the start time and end time of this data file;
-	printf("#%f\t%f\n", begints, endts);
-	
+	//printf("#%f\t%f\n", begints, endts);
+
+
+	//print fsdb header
+	printf("#fsdb ip_hex tcp_synack_events pair_events pkts_count_as_src pkts_count_as_dst bytes_count_as_src bytes_count_as_dst uniq_end_count uniq_dst_count uniq_src_count\n");
+
 	//print the stats info of all ip addresses in this data file
 	print_all_ip_statsinfo();
 
