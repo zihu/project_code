@@ -9,21 +9,28 @@
 #  echo "world" 
 #fi
 
-TRACE_DIR="/home/zihu/Projects/project_code/Gloriad/bin_temp_data"
-TRACE_DST_DIR="/home/zihu/Projects/project_code/Gloriad/bin_data"
-MTRACE_FN=" erf:"$TRACE_DST_DIR"/test"
-echo $MTRACE_FN
+#TRACE_DIR="/home/zihu/Projects/project_code/Gloriad/bin_temp_data"
+#TRACE_DST_DIR="/home/zihu/Projects/project_code/Gloriad/bin_data"
+#MTRACE_FN=" erf:"$TRACE_DST_DIR"/test"
+#echo $MTRACE_FN
+#
+#
+#merge_traces()
+#{
+#  CMD_STR=""
+#  while read trace
+#  do
+#    CMD_STR=$CMD_STR" erf:"$TRACE_DIR/$trace
+#  done <<< "$(ls $TRACE_DIR)"
+#  echo $CMD_STR
+#  tracemerge $MTRACE_FN $CMD_STR
+#}
+#
+#merge_traces
 
-
-merge_traces()
-{
-  CMD_STR=""
-  while read trace
-  do
-    CMD_STR=$CMD_STR" erf:"$TRACE_DIR/$trace
-  done <<< "$(ls $TRACE_DIR)"
-  echo $CMD_STR
-  tracemerge $MTRACE_FN $CMD_STR
-}
-
-merge_traces
+STR=$(ls test_dir)
+if [ -n "$STR" ]; then
+  echo "not empty"
+else
+  echo "empty"
+fi

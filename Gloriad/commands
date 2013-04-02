@@ -1,1 +1,2 @@
 g++ -o aliveip_metric_stats aliveip_metric_stats.c -I/home/zihu/Software/libtrace-3.0.16/lib -ltrace
+gcc -o tracesplit tracesplit.c -I/home/zihu/Software/libtrace-3.0.16/lib -ltrace
