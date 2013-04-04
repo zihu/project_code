@@ -5,10 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lt_inttypes.h"
-#include <list>
-#include <set>
-#include <map>
 #include <arpa/inet.h>
+
 using namespace std;
 
 double lastts = 0.0;
@@ -28,116 +26,6 @@ struct in_addr src_ip, src_ip1;
 struct in_addr dst_ip, dst_ip1;
 char srcip_buf[256], srcip_buf1[256];
 char dstip_buf[256], dstip_buf1[256];
-
-
-//timestamp srcIP and dstIP tuple. 
-struct ts_src_dst
-{
-  double _ts;
-  unsigned long _src;
-  unsigned long _dst;
-};
-
-//stats information for each IP address
-struct stat_info 
-{
-  unsigned long _tcp_synack_event;
-  unsigned long _pair_event;
-  unsigned long _srccount;
-  unsigned long _dstcount;
-  unsigned long _srcbytes;
-  unsigned long _dstbytes;
-};
-
-list<ts_src_dst> interval_packets;
-set<unsigned long> alive_ip_set;
-map<unsigned long, stat_info> ip_records;
-
-
-void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, bool is_pair, unsigned short bytes)
-{
-  struct stat_info temp_record;
-  map<unsigned long, stat_info>::iterator mit;
-  //update src ip record;
-  mit = ip_records.find(src);
-  if(mit != ip_records.end())
-  {
-    (mit->second)._srccount += 1;
-    (mit->second)._srcbytes += bytes;
-    if(is_typsynack)
-      (mit->second)._tcp_synack_event += 1;
-    if(is_pair)
-      (mit->second)._pair_event += 1;
-  }
-  else
-  {
-    memset(&temp_record,0, sizeof(temp_record));
-    temp_record._srccount = 1;
-    temp_record._dstcount = 0;
-    temp_record._srcbytes = bytes;
-    temp_record._dstbytes = 0;
-
-    if(is_typsynack)
-      temp_record._tcp_synack_event = 1;
-    else
-      temp_record._tcp_synack_event = 0;
-    if(is_pair)
-      temp_record._pair_event = 1;
-    else
-      temp_record._pair_event = 0;
-    ip_records.insert(pair<unsigned long, stat_info>(src, temp_record));
-  }
-
-
-  //update dst ip record;
-  mit = ip_records.find(dst);
-  if(mit != ip_records.end())
-  {
-    (mit->second)._dstcount += 1;
-    (mit->second)._dstbytes += bytes;
-  }
-  else
-  {
-    memset(&temp_record,0, sizeof(temp_record));
-    temp_record._srccount = 0;
-    temp_record._dstcount = 1;
-    temp_record._srcbytes = 0;
-    temp_record._dstbytes = bytes;
-    temp_record._tcp_synack_event = 0;
-    temp_record._pair_event = 0;
-    ip_records.insert(pair<unsigned long, stat_info>(dst, temp_record));
-  }
-
-}
-
-
-int find_match(unsigned long src, unsigned long dst, double ts, double interval)
-{
-  list<ts_src_dst>::reverse_iterator it;
-  for(it=interval_packets.rbegin(); it!= interval_packets.rend(); ++it)
-  {
-    if(src == it->_dst && dst == it->_src)
-    {
-      /*
-      memset(srcip_buf, 0, 256);
-      memset(dstip_buf, 0, 256);
-      strcpy(srcip_buf, inet_ntoa(src_ip));
-      strcpy(dstip_buf, inet_ntoa(dst_ip));
-
-      src_ip1.s_addr = it->_src;
-      dst_ip1.s_addr = it->_dst;
-      memset(srcip_buf1, 0, 256);
-      memset(dstip_buf1, 0, 256);
-      strcpy(srcip_buf1, inet_ntoa(src_ip1));
-      strcpy(dstip_buf1, inet_ntoa(dst_ip1));
-      printf("%f\t%s\t%s\t%f\t%s\t%s\n",it->_ts, srcip_buf1, dstip_buf1, ts, srcip_buf, dstip_buf);
-      */
-      if(ts-it->_ts <= interval)
-	return 1;
-    }
-  }
-  return 0;
-}
 
 
 static void per_packet(libtrace_packet_t *packet, const double interval)
@@ -167,21 +55,6 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	ts = trace_get_seconds(packet);
 	bytes = trace_get_wire_length(packet);
 
-	if(startts == 0.0)
-	{
-	  startts = trace_get_seconds(packet);
-	  prets = startts;
-	  curts = startts;
-	  begints = startts;
-	}
-	else
-	{
-	  prets = curts;
-	  curts = ts;
-	  endts = ts;
-	}
-
-
  	l3 = trace_get_layer3(packet,&ethertype,&remaining);
 
 	if (!l3)
@@ -200,6 +73,8 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 			{
 			  src_ip.s_addr = (ip->ip_src).s_addr;
 			  dst_ip.s_addr = (ip->ip_dst).s_addr;
+			  if(src_ip.s_addr ==0 || dst_ip.s_addr ==0)
+			    return;
 			}
 			break;
 		default:
@@ -236,43 +111,13 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	{
 	  tcp_synack = 1;
 	}
-	memset(srcip_buf, 0, 256);
-	memset(dstip_buf, 0, 256);
-	strcpy(srcip_buf, inet_ntoa(src_ip));
-	strcpy(dstip_buf, inet_ntoa(dst_ip));
-	printf("%f\t%s\t%02x\t%s\t%02x\t%d\n", ts, srcip_buf, ntohl(src_ip.s_addr), dstip_buf, ntohl(dst_ip.s_addr), tcp_synack);
+	printf("%f\t%lu\t%lu\t%d\t%d\n", ts, ntohl(src_ip.s_addr), ntohl(dst_ip.s_addr), tcp_synack, bytes);
 }
 
 static void usage(char *argv0)
 {
 	fprintf(stderr,"usage: %s [ --filter | -f bpfexp ]  [ --max-interval | -t interval ]\n\t\t[ --help | -h ] [ --libtrace-help | -H ] libtraceuri...\n",argv0);
 }
-
-void print_all_alive_ip()
-{
-  set<unsigned long>::iterator it;
-  struct in_addr alive_ip;
-  for(it= alive_ip_set.begin(); it != alive_ip_set.end(); it++)
-  {
-    alive_ip.s_addr = (*it);
-    //printf("%lu\t%s\n",(*it), inet_ntoa(alive_ip));
-    printf("%s\n", inet_ntoa(alive_ip));
-
-  }
-}
-
-void print_all_ip_statsinfo()
-{
-  map<unsigned long, stat_info>::iterator mit;
-  struct in_addr ip_addr;
-  for(mit= ip_records.begin(); mit != ip_records.end(); mit++)
-  {
-    ip_addr.s_addr = mit->first;
-    printf("%02x\t%s\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\n", ntohl(ip_addr.s_addr),inet_ntoa(ip_addr),(mit->second)._tcp_synack_event,(mit->second)._pair_event, (mit->second)._srccount, (mit->second)._dstcount, (mit->second)._srcbytes, (mit->second)._dstbytes );
-
-  }
-}
-
 
 int main(int argc, char *argv[])
 {
@@ -357,6 +202,6 @@ int main(int argc, char *argv[])
 		trace_destroy(trace);
 	}
 
-	printf("%f\t%f\n",startts, endts );
+	//printf("%f\t%f\n",startts, endts );
 	return 0;
 }

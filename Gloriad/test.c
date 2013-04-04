@@ -11,6 +11,20 @@ struct stat_info
   set<unsigned long> _uniq_ips;
 };
 
+
+int main(int argc, char** argv)
+{
+  map<int, char> test_map;
+  test_map.insert(pair<int,char>(10, 'A'));
+  test_map.insert(pair<int,char>(5, 'B'));
+  test_map.insert(pair<int,char>(1, 'C'));
+  map<int, char>::iterator mit;
+  for(mit =test_map.begin(); mit!=test_map.end(); mit++)
+  {
+    printf("%d\t%c\n", mit->first, mit->second);
+  }
+}
+/*
 int main(int argc, char**argv)
 {
   char *ip_str="50.22.100.250";
@@ -21,7 +35,9 @@ int main(int argc, char**argv)
 
   printf("%s:%s\n",ip_str, inet_ntoa(ip_addr));
   printf("%02x\n", htonl(ip_int));
+  printf("%d\n",sizeof(unsigned long));
 }
+*/
 
 /*
 int main(int argc, char** argv)
