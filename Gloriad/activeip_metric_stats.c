@@ -253,6 +253,8 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 			{
 			  src_ip.s_addr = (ip->ip_src).s_addr;
 			  dst_ip.s_addr = (ip->ip_dst).s_addr;
+			  if(src_ip.s_addr == 0 || dst_ip.s_addr ==0)
+			    return;
 			}
 			break;
 		default:
@@ -263,23 +265,21 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	switch(ip->ip_p) {
 		case 1:
 		  	icmp = trace_get_icmp(packet);
+			src_port=0;
+			dst_port=0;
 			if(icmp->type == 0) // || icmp->type == 3 || icmp->type == 5 || icmp->type == 11)
 			{
-			  src_port=0;
-			  dst_port=0;
-			  //is_alive = true;
 			  //ICMP reply/error packet;
 			}
 			break;
 		case 6:
-			//tcp = (libtrace_tcp_t*)transport;
 			tcp = trace_get_tcp(packet);
+			//proof event: syn+ack packet;
 			if(tcp && tcp->syn && tcp->ack)
 			{
 			  src_port=tcp->source;
 			  dst_port=tcp->dest;
 			  is_tcpsynack = true;
-			  //syn+ack packet;
 			}
 			break;
 		case 17:
@@ -295,19 +295,22 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	}
 
 
-      memset(srcip_buf, 0, 256);
-      memset(dstip_buf, 0, 256);
-      strcpy(srcip_buf, inet_ntoa(src_ip));
-      strcpy(dstip_buf, inet_ntoa(dst_ip));
 
+	/*
+        memset(srcip_buf, 0, 256);
+        memset(dstip_buf, 0, 256);
+        strcpy(srcip_buf, inet_ntoa(src_ip));
+        strcpy(dstip_buf, inet_ntoa(dst_ip));
+	*/
 
 	map<flow_key, double>::iterator fk_mit;
-	//search previous bin map and curernt bin map for reverse five tuples;
+	//search curernt second bin and last second bin for reverse five tuples;
 	flow_key r_flow_key(dst_ip.s_addr, dst_port, src_ip.s_addr, src_port, ip->ip_p);
 	if(cur_bin_packets->size()!=0)
 	{
+	  //first search current second bin
 	  fk_mit=cur_bin_packets->find(r_flow_key);
-	  if(fk_mit!=cur_bin_packets->end())
+	  if(fk_mit!=cur_bin_packets->end() && (ts-(fk_mit->second) <= interval ))
 	  {
 	    is_pair = true;
 	    /*
@@ -323,6 +326,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	  }
 	  else
 	  {
+	    //search last second bin if no match in current second bin
 	    fk_mit=pre_bin_packets->find(r_flow_key);
 	    if((fk_mit!=pre_bin_packets->end())&& (ts-(fk_mit->second) <= interval ))
 	    {
@@ -348,7 +352,6 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	    fk_mit=pre_bin_packets->find(r_flow_key);
 	    if((fk_mit!=pre_bin_packets->end())&& (ts-(fk_mit->second) <= interval ))
 	    {
-
 	      /*
 	      src_ip1.s_addr = (fk_mit->first)._src_ip;
             dst_ip1.s_addr = (fk_mit->first)._dst_ip;
@@ -364,8 +367,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	  }
 	}
 
-
-	//push the new packet to current bin map or previous bin map;
+	//place the new packet to current second bin or last second bin;
 	flow_key temp_flow_key(src_ip.s_addr, src_port, dst_ip.s_addr, dst_port, ip->ip_p);
 	if(pre_bin_packets->size()==0)
 	{
@@ -374,13 +376,13 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	}
 	else
 	{
-	  //put it into the previous bin map
+	  //put it into the last second bin if the packet is in the range of the last second bin
 	  if(ts- pre_bin_start_ts <= interval)
 	  {
 	    fk_mit=pre_bin_packets->find(temp_flow_key);
 	    if(fk_mit!=pre_bin_packets->end())
 	    {
-	      //find match tuple, update timestamp  
+	      //find match, only need update timestamp  
 	      fk_mit->second = ts;
 	    }
 	    else
@@ -388,7 +390,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	      pre_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
 	    }
 	  }
-	  //put it into the current bin map
+	  //put it into the current second bin if the packet is beyond the range of the last second bin
 	  else
 	  {
 	    if(cur_bin_packets->size()==0)
@@ -413,10 +415,10 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	      }
 	      else
 	      {
-		//current bin map replaces the previous bin map, and create a new current bin map;
-		//clear the previous bin map;
+		//current second bin becomes the last second bin, we need to create a new current bin;
+		//clear the last second bin;
 		pre_bin_packets->clear();
-		//current bin map become previous
+		//current second bin becomes old
 		pre_bin_packets = cur_bin_packets;
 		pre_bin_start_ts = cur_bin_start_ts;
 		//create a new current bin map
@@ -556,7 +558,7 @@ int main(int argc, char *argv[])
 
 
 	//print the start time and end time of this data file;
-	//printf("#%f\t%f\n", begints, endts);
+	printf("#trace start:%f\ttrace end:%f\tduration:%f\n", begints, endts, (endts-begints));
 
 
 	//print fsdb header
