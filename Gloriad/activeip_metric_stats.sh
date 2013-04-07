@@ -3,7 +3,7 @@ INPUTFILE=$1
 
 ACTIVEIP_STATDIR="/home/zihu/activeip_stat"
 ACTIVEIP_STATS_BIN="$ACTIVEIP_STATDIR/activeip_metric_stats"
-PROCESS_TRACES="$ACTIVEIP_STATDIR/process_bin_traces.dat"
+PROCESS_TRACES="$ACTIVEIP_STATDIR/all_processed_bins.dat"
 
 
 #extract lander name:

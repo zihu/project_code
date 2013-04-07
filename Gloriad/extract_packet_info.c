@@ -111,7 +111,14 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	{
 	  tcp_synack = 1;
 	}
-	printf("%f\t%lu\t%lu\t%d\t%d\n", ts, ntohl(src_ip.s_addr), ntohl(dst_ip.s_addr), tcp_synack, bytes);
+	//printf("%f\t%lu\t%lu\t%d\t%d\n", ts, ntohl(src_ip.s_addr), ntohl(dst_ip.s_addr), tcp_synack, bytes);
+      memset(srcip_buf, 0, 256);
+      memset(dstip_buf, 0, 256);
+      strcpy(srcip_buf, inet_ntoa(src_ip));
+      strcpy(dstip_buf, inet_ntoa(dst_ip));
+      printf("%f\t%s\t%s\t%d\t%d\n", ts, srcip_buf, dstip_buf, tcp_synack, bytes);
+
+
 }
 
 static void usage(char *argv0)

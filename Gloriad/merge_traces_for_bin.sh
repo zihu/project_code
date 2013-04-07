@@ -5,8 +5,8 @@
 # move the merged trace to another directory for further processing and remove the bin
 
 MAX_WAIT_TIME=1800
-BIN_DIR="/home/zihu/activeip_stat/bin_tmp_data/lander_br"
-[ -d "$MERGED_BIN_DIR" ] || return 
+BIN_DIR="$1"
+[ -d "$BIN_DIR" ] || exit 0 
 
 
 ACTIVEIP_STATDIR="/home/zihu/activeip_stat"
@@ -24,21 +24,25 @@ MERGED_BIN_DIR="$ACTIVEIP_STATDIR/bin_data/$landername"
 merge_traces()
 {
   MTRACE="erf:"$1
-  BIN_TRACES_DIR="$2"
-  FILES=$(ls $BIN_TRACES_DIR)
+  BIN_DIR_W_TRACES="$2"
+  FILES=$(ls $BIN_DIR_W_TRACES)
 
   if [ -z "$FILES" ];then
     return
   fi
+
   CMD_STR=""
   while read trace
   do
-    CMD_STR=$CMD_STR" erf:"$BIN_TRACES_DIR/$trace
-  done <<< "$(ls $BIN_TRACES_DIR)"
+    CMD_STR=$CMD_STR" erf:"$BIN_DIR_W_TRACES/$trace
+  done <<< "$(ls $BIN_DIR_W_TRACES)"
   $TRACE_MERGE $MTRACE $CMD_STR
 }
 
+DIRS=$(ls $BIN_DIR)
+[ "$DIRS" ] || exit 0
 
+MERGE_TIME=$(date "+%Y%m%d-%H%M%S")
 while read BIN_TRACES_DIR
 do
   traces_dir=$BIN_DIR/$BIN_TRACES_DIR
@@ -54,7 +58,7 @@ do
     merged_trace=$MERGED_BIN_DIR/$merged_trace_base
     #echo $BIN_TRACES_DIR $merged_trace $traces_dir
     merge_traces $merged_trace $traces_dir
-    echo $BIN_TRACES_DIR $merged_trace >> $ALL_MERGED_DIR_RECORD
+    echo $MERGE_TIME $BIN_TRACES_DIR $merged_trace >> $ALL_MERGED_DIR_RECORD
     /bin/rm -rf $traces_dir
   fi
 done <<< "$(ls $BIN_DIR)"

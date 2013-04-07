@@ -11,6 +11,64 @@
 #include <arpa/inet.h>
 using namespace std;
 
+typedef unsigned long ulong;
+typedef unsigned int uint;
+typedef unsigned short ushort ;
+
+class flow_key
+{
+  public:
+    ulong _src_ip;
+    uint _src_port;
+    ulong _dst_ip;
+    uint _dst_port;
+    ushort _protocol;
+  public:
+    flow_key();
+    flow_key(ulong src_ip, uint src_port, ulong dst_ip, uint dst_port, ushort protocol)
+    {
+      _src_ip = src_ip;
+      _src_port = src_port;
+      _dst_ip = dst_ip;
+      _dst_port = dst_port;
+      _protocol = protocol;
+    }
+    
+    bool operator == (const flow_key &right) const
+    {
+      return (_src_ip == right._src_ip && _src_port == right._src_port && _dst_ip == right._dst_ip && _dst_port == right._dst_port && _protocol == right._protocol);
+    }
+
+    bool operator < (const flow_key &right) const
+    {
+      if ( _src_ip == right._src_ip ) 
+      {
+	if ( _dst_ip == right._dst_ip )
+	{
+	  if ( _src_port == right._src_port ) 
+	  {
+	    if ( _dst_port == right._dst_port)
+	      return _protocol < right._protocol;
+	    else
+	      return _dst_port < right._dst_port;
+	  }
+	  else 
+	  {
+	    return _src_port < right._src_port;
+	  }
+	}
+	else 
+	{
+	  return _dst_ip < right._dst_ip;
+	}
+      }
+      else 
+      {
+	return _src_ip < right._src_ip;
+      }
+    }    
+};
+
 double lastts = 0.0;
 double startts = 0.0;
 double begints = 0.0;
@@ -52,11 +110,14 @@ struct stat_info
   set<unsigned long> _uniq_src_set;
 };
 
-list<ts_src_dst> interval_packets;
+
+map<flow_key, double>* pre_bin_packets = new map<flow_key, double>;
+map<flow_key, double>* cur_bin_packets = new map<flow_key, double>;
+double cur_bin_start_ts = 0.0;
+double pre_bin_start_ts = 0.0;
+
 set<unsigned long> alive_ip_set;
 map<unsigned long, stat_info> ip_records;
-//map<unsigned long, set<unsigned long> > srcip_uniq_ips;
-//map<unsigned long, set<unsigned long> > dstip_uniq_ips; 
 
 void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, bool is_pair, unsigned short bytes)
 {
@@ -80,17 +141,6 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
     //update src -> unique destination set
     ((mit->second)._uniq_end_set).insert(dst);
     ((mit->second)._uniq_dst_set).insert(dst);
-
-
-    /*
-    uniq_end_set = &((mit->second)._uniq_end_set);
-    uniq_endset_sit = uniq_end_set->find(dst);
-    if(uniq_endset_sit == uniq_end_set->end())
-    {
-      uniq_end_set->insert(dst);
-    }
-    */
-
   }
   else
   {
@@ -138,33 +188,6 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
 }
 
 
-int find_match(unsigned long src, unsigned long dst, double ts, double interval)
-{
-  list<ts_src_dst>::reverse_iterator it;
-  for(it=interval_packets.rbegin(); it!= interval_packets.rend(); ++it)
-  {
-    if(src == it->_dst && dst == it->_src)
-    {
-      /*
-      memset(srcip_buf, 0, 256);
-      memset(dstip_buf, 0, 256);
-      strcpy(srcip_buf, inet_ntoa(src_ip));
-      strcpy(dstip_buf, inet_ntoa(dst_ip));
-
-      src_ip1.s_addr = it->_src;
-      dst_ip1.s_addr = it->_dst;
-      memset(srcip_buf1, 0, 256);
-      memset(dstip_buf1, 0, 256);
-      strcpy(srcip_buf1, inet_ntoa(src_ip1));
-      strcpy(dstip_buf1, inet_ntoa(dst_ip1));
-      printf("%f\t%s\t%s\t%f\t%s\t%s\n",it->_ts, srcip_buf1, dstip_buf1, ts, srcip_buf, dstip_buf);
-      */
-      if(ts-it->_ts <= interval)
-	return 1;
-    }
-  }
-  return 0;
-}
 
 
 static void per_packet(libtrace_packet_t *packet, const double interval)
@@ -175,6 +198,8 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
   bool is_pair = false;
 
   uint64_t bytes = 0;
+  uint src_port=0;
+  uint dst_port=0;
 
 	/* Packet data */
 	uint32_t remaining;
@@ -187,6 +212,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	/* Payload data */
 	void *payload;
 	libtrace_tcp_t *tcp = NULL;
+	libtrace_udp_t *udp = NULL;
 	libtrace_ip_t *ip = NULL;
 	libtrace_icmp_t *icmp = NULL;
 
@@ -227,31 +253,6 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 			{
 			  src_ip.s_addr = (ip->ip_src).s_addr;
 			  dst_ip.s_addr = (ip->ip_dst).s_addr;
-
-			  //test if exists any match of packets in the time range.
-			  if(find_match(src_ip.s_addr, dst_ip.s_addr,ts, interval)==1)
-			    is_pair=true;
-
-			  //push to the queue if ts-startts < interval; otherwise, pop the oldest, and push the new one. 
-			  ts_src_dst temp_item;
-			  temp_item._ts = ts;
-			  temp_item._src = src_ip.s_addr;
-			  temp_item._dst = dst_ip.s_addr;
-			  if( (ts-(interval_packets.front())._ts) <= interval)
-			  {
-			    interval_packets.push_back(temp_item);
-			  }
-			  else
-			  {
-			    //pop out all the old tuple that exceed the time interval. 
-			    while(!interval_packets.empty())
-			    {
-			      interval_packets.pop_front();
-			      if((ts-(interval_packets.front())._ts) < interval)
-				break;
-			    }
-			    interval_packets.push_back(temp_item);
-			  }
 			}
 			break;
 		default:
@@ -264,6 +265,8 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 		  	icmp = trace_get_icmp(packet);
 			if(icmp->type == 0) // || icmp->type == 3 || icmp->type == 5 || icmp->type == 11)
 			{
+			  src_port=0;
+			  dst_port=0;
 			  //is_alive = true;
 			  //ICMP reply/error packet;
 			}
@@ -273,37 +276,161 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 			tcp = trace_get_tcp(packet);
 			if(tcp && tcp->syn && tcp->ack)
 			{
+			  src_port=tcp->source;
+			  dst_port=tcp->dest;
 			  is_tcpsynack = true;
 			  //syn+ack packet;
 			}
 			break;
 		case 17:
+			udp = trace_get_udp(packet);
+			if(udp)
+			{
+			  src_port=udp->source;
+			  dst_port=udp->dest;
+			}
 			break;
 		default:
 			return;
 	}
 
 
+      memset(srcip_buf, 0, 256);
+      memset(dstip_buf, 0, 256);
+      strcpy(srcip_buf, inet_ntoa(src_ip));
+      strcpy(dstip_buf, inet_ntoa(dst_ip));
+
+
+	map<flow_key, double>::iterator fk_mit;
+	//search previous bin map and curernt bin map for reverse five tuples;
+	flow_key r_flow_key(dst_ip.s_addr, dst_port, src_ip.s_addr, src_port, ip->ip_p);
+	if(cur_bin_packets->size()!=0)
+	{
+	  fk_mit=cur_bin_packets->find(r_flow_key);
+	  if(fk_mit!=cur_bin_packets->end())
+	  {
+	    is_pair = true;
+	    /*
+            src_ip1.s_addr = (fk_mit->first)._src_ip;
+            dst_ip1.s_addr = (fk_mit->first)._dst_ip;
+            memset(srcip_buf1, 0, 256);
+            memset(dstip_buf1, 0, 256);
+            strcpy(srcip_buf1, inet_ntoa(src_ip1));
+            strcpy(dstip_buf1, inet_ntoa(dst_ip1));
+            printf("%f\t%s\t%s\t%f\t%s\t%s\n",fk_mit->second, srcip_buf1, dstip_buf1, ts, srcip_buf, dstip_buf);
+	    */
+
+	  }
+	  else
+	  {
+	    fk_mit=pre_bin_packets->find(r_flow_key);
+	    if((fk_mit!=pre_bin_packets->end())&& (ts-(fk_mit->second) <= interval ))
+	    {
+	      is_pair = true;
+
+	      /*
+	      src_ip1.s_addr = (fk_mit->first)._src_ip;
+            dst_ip1.s_addr = (fk_mit->first)._dst_ip;
+            memset(srcip_buf1, 0, 256);
+            memset(dstip_buf1, 0, 256);
+            strcpy(srcip_buf1, inet_ntoa(src_ip1));
+            strcpy(dstip_buf1, inet_ntoa(dst_ip1));
+            printf("%f\t%s\t%s\t%f\t%s\t%s\n",fk_mit->second, srcip_buf1, dstip_buf1, ts, srcip_buf, dstip_buf);
+	    */
+
+	    }
+	  }
+	}
+	else
+	{
+	  if(pre_bin_packets->size()!=0)
+	  {
+	    fk_mit=pre_bin_packets->find(r_flow_key);
+	    if((fk_mit!=pre_bin_packets->end())&& (ts-(fk_mit->second) <= interval ))
+	    {
+
+	      /*
+	      src_ip1.s_addr = (fk_mit->first)._src_ip;
+            dst_ip1.s_addr = (fk_mit->first)._dst_ip;
+            memset(srcip_buf1, 0, 256);
+            memset(dstip_buf1, 0, 256);
+            strcpy(srcip_buf1, inet_ntoa(src_ip1));
+            strcpy(dstip_buf1, inet_ntoa(dst_ip1));
+            printf("%f\t%s\t%s\t%f\t%s\t%s\n",fk_mit->second, srcip_buf1, dstip_buf1, ts, srcip_buf, dstip_buf);
+	    */
+
+	      is_pair = true;
+	    }
+	  }
+	}
+
+
+	//push the new packet to current bin map or previous bin map;
+	flow_key temp_flow_key(src_ip.s_addr, src_port, dst_ip.s_addr, dst_port, ip->ip_p);
+	if(pre_bin_packets->size()==0)
+	{
+	  pre_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
+	  pre_bin_start_ts = ts;
+	}
+	else
+	{
+	  //put it into the previous bin map
+	  if(ts- pre_bin_start_ts <= interval)
+	  {
+	    fk_mit=pre_bin_packets->find(temp_flow_key);
+	    if(fk_mit!=pre_bin_packets->end())
+	    {
+	      //find match tuple, update timestamp  
+	      fk_mit->second = ts;
+	    }
+	    else
+	    {
+	      pre_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
+	    }
+	  }
+	  //put it into the current bin map
+	  else
+	  {
+	    if(cur_bin_packets->size()==0)
+	    {
+	      cur_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
+	      cur_bin_start_ts = ts; 
+	    }
+	    else
+	    {
+	      if(ts- cur_bin_start_ts <= interval)
+	      {
+	        fk_mit=cur_bin_packets->find(temp_flow_key);
+	        if(fk_mit!=cur_bin_packets->end())
+	        {
+		  //update timestamp to be the most recent
+		  fk_mit->second = ts;
+	        }
+	        else
+	        {
+		  cur_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
+	        }
+	      }
+	      else
+	      {
+		//current bin map replaces the previous bin map, and create a new current bin map;
+		//clear the previous bin map;
+		pre_bin_packets->clear();
+		//current bin map become previous
+		pre_bin_packets = cur_bin_packets;
+		pre_bin_start_ts = cur_bin_start_ts;
+		//create a new current bin map
+		map<flow_key, double>* temp_bin_packets = new map<flow_key, double>;
+		temp_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
+		cur_bin_packets = temp_bin_packets;
+		cur_bin_start_ts = ts;
+	      }
+	    }
+	  }
+	}
 
 	//update stats info for both the src and dst ip in this packet. 
 	update_ip_records(src_ip.s_addr, dst_ip.s_addr, is_tcpsynack, is_pair, bytes);
-
-	/*
-	if(is_alive)
-	{
-	  alive_ip_set.insert(src_ip.s_addr);
-	}
-
-	if(is_alive)
-	{
-	  memset(srcip_buf, 0, 256);
-	  memset(dstip_buf, 0, 256);
-	  strcpy(srcip_buf, inet_ntoa(src_ip));
-	  strcpy(dstip_buf, inet_ntoa(dst_ip));
-	  printf("%f\t%s\t%s\n", ts, srcip_buf, dstip_buf);
-	  is_alive = false;
-	}
-	*/
 }
 
 static void usage(char *argv0)
@@ -439,8 +566,8 @@ int main(int argc, char *argv[])
 	print_all_ip_statsinfo();
 
 	//clear all containers. 
-	//alive_ip_set.clear();
-	interval_packets.clear();
+	pre_bin_packets->clear();
+	cur_bin_packets->clear();
 	ip_records.clear();
 
 	return 0;
