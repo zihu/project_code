@@ -8,12 +8,17 @@
 #include <list>
 #include <set>
 #include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <boost/functional/hash.hpp>
 #include <arpa/inet.h>
 using namespace std;
 
 typedef unsigned long ulong;
 typedef unsigned int uint;
 typedef unsigned short ushort ;
+
+
 
 class flow_key
 {
@@ -67,7 +72,25 @@ class flow_key
 	return _src_ip < right._src_ip;
       }
     }    
+
+    
 };
+
+class fk_hash
+{
+  public:
+  size_t operator() (const flow_key & fk) const
+  {
+        size_t seed = 0;
+        boost::hash_combine(seed, fk._src_ip);
+        boost::hash_combine(seed, fk._src_port);
+	boost::hash_combine(seed, fk._dst_ip);
+	boost::hash_combine(seed, fk._dst_port);
+	boost::hash_combine(seed, fk._protocol);
+        return seed;
+  }
+};
+
 
 double lastts = 0.0;
 double startts = 0.0;
@@ -105,19 +128,21 @@ struct stat_info
   unsigned long _dstcount;
   unsigned long _srcbytes;
   unsigned long _dstbytes;
-  set<unsigned long> _uniq_end_set;
-  set<unsigned long> _uniq_dst_set;
-  set<unsigned long> _uniq_src_set;
+  unordered_set<unsigned long> _uniq_end_set;
+  unordered_set<unsigned long> _uniq_dst_set;
+  unordered_set<unsigned long> _uniq_src_set;
 };
 
 
-map<flow_key, double>* pre_bin_packets = new map<flow_key, double>;
-map<flow_key, double>* cur_bin_packets = new map<flow_key, double>;
+unordered_map<flow_key, double, fk_hash >* pre_bin_packets = new unordered_map<flow_key, double, fk_hash >;
+unordered_map<flow_key, double, fk_hash >* cur_bin_packets = new unordered_map<flow_key, double, fk_hash >;
+//map<flow_key, double >* pre_bin_packets = new map<flow_key, double>;
+//map<flow_key, double >* cur_bin_packets = new map<flow_key, double>;
+
 double cur_bin_start_ts = 0.0;
 double pre_bin_start_ts = 0.0;
 
-set<unsigned long> alive_ip_set;
-map<unsigned long, stat_info> ip_records;
+unordered_map<unsigned long, stat_info> ip_records;
 
 void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, bool is_pair, unsigned short bytes)
 {
@@ -125,7 +150,7 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
   //update dst -> source set
 
   struct stat_info temp_record;
-  map<unsigned long, stat_info>::iterator mit;
+  unordered_map<unsigned long, stat_info>::iterator mit;
   //update src ip record;
   mit = ip_records.find(src);
   if(mit != ip_records.end())
@@ -204,7 +229,6 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	/* L3 data */
 	void *l3;
 	uint16_t ethertype;
-	/* Transport data */
 	libtrace_tcp_t *tcp = NULL;
 	libtrace_udp_t *udp = NULL;
 	libtrace_ip_t *ip = NULL;
@@ -297,7 +321,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
         strcpy(dstip_buf, inet_ntoa(dst_ip));
 	*/
 
-	map<flow_key, double>::iterator fk_mit;
+	unordered_map<flow_key, double, fk_hash >::iterator fk_mit;
 	//search curernt second bin and last second bin for reverse five tuples;
 	flow_key r_flow_key(dst_ip.s_addr, dst_port, src_ip.s_addr, src_port, ip->ip_p);
 	if(cur_bin_packets->size()!=0)
@@ -416,7 +440,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 		pre_bin_packets = cur_bin_packets;
 		pre_bin_start_ts = cur_bin_start_ts;
 		//create a new current bin map
-		map<flow_key, double>* temp_bin_packets = new map<flow_key, double>;
+		unordered_map<flow_key, double, fk_hash >* temp_bin_packets = new unordered_map<flow_key, double, fk_hash>;
 		temp_bin_packets->insert(pair<flow_key, double>(temp_flow_key, ts));
 		cur_bin_packets = temp_bin_packets;
 		cur_bin_start_ts = ts;
@@ -434,6 +458,7 @@ static void usage(char *argv0)
 	fprintf(stderr,"usage: %s [ --filter | -f bpfexp ]  [ --max-interval | -t interval ]\n\t\t[ --help | -h ] [ --libtrace-help | -H ] libtraceuri...\n",argv0);
 }
 
+/*
 void print_all_alive_ip()
 {
   set<unsigned long>::iterator it;
@@ -446,15 +471,12 @@ void print_all_alive_ip()
 
   }
 }
+*/
 
-  set<unsigned long> _uniq_end_set;
-  set<unsigned long> _uniq_dst_set;
-  set<unsigned long> _uniq_src_set;
-
-
+  
 void print_all_ip_statsinfo()
 {
-  map<unsigned long, stat_info>::iterator mit;
+  unordered_map<unsigned long, stat_info>::iterator mit;
   struct in_addr ip_addr;
   for(mit= ip_records.begin(); mit != ip_records.end(); mit++)
   {
