@@ -29,8 +29,6 @@ struct in_addr dst_ip, dst_ip1;
 char srcip_buf[256], srcip_buf1[256];
 char dstip_buf[256], dstip_buf1[256];
 
-
-
 static void per_packet(libtrace_packet_t *packet, const double interval)
 {
 	/* Packet data */
@@ -39,9 +37,6 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 	void *l3;
 	uint16_t ethertype;
 	l3 = trace_get_layer3(packet,&ethertype,&remaining);
-
-	
-
 
 	libtrace_ip_t *ip = NULL;
 
@@ -60,7 +55,7 @@ static void per_packet(libtrace_packet_t *packet, const double interval)
 			  if(src_ip.s_addr ==0 || dst_ip.s_addr ==0)
 			    return;
 
-				  ts = trace_get_seconds(packet);
+	   		  ts = trace_get_seconds(packet);
 			  if(startts < 0.0)
 			  {
 	  			startts=ts;

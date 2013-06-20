@@ -7,14 +7,13 @@
 # bin time range
 INTERVAL=900 
 INPUTFILE=$1
-ACTIVEIP_STATDIR="/home/zihu/Projects/project_code/Gloriad"
+ACTIVEIP_STATDIR="/home/samfs-02/LANDER/zihu/activeip_stat"
 GET_F_L_TS_BIN="$ACTIVEIP_STATDIR/get_f_l_ts"
 STATUS_FN="$ACTIVEIP_STATDIR/cur_bin_status"
 ALL_STATUS_RECORD="$ACTIVEIP_STATDIR/all_bin_records.dat"
 ALL_TRACES_RECORD="$ACTIVEIP_STATDIR/all_traces_records.dat"
 
-#record all the traces processed
-echo $INPUTFILE >> $ALL_TRACES_RECORD
+PROCESS_TIME_BEFORE=$(date "+%Y%m%d-%H%M%S")
 
 #extract lander name:
 dirname=${INPUTFILE%/*}
@@ -84,15 +83,39 @@ else
   done
 fi
 
+PROCESS_TIME_AFTER=$(date "+%Y%m%d-%H%M%S")
+#record all the traces processed
+echo $PROCESS_TIME_BEFORE $PROCESS_TIME_AFTER $INPUTFILE >> $ALL_TRACES_RECORD
+
+
 
 
 # merge traces in some bins if necessary
 # if any bin directory has been modified since the last $MAX_WAIT_TIME, we merge all the traces in the bin directory
 # move the merged trace to another directory for further processing,  and remove the bin
 ALL_MERGED_DIR_RECORD="$ACTIVEIP_STATDIR/all_merged_bin_records.dat"
-BIN_DIR="$BIN_TMP_DIR"
+MAX_LOCK_ALIVE_TIME=1800
+LOCK_DIR="$ACTIVEIP_STATDIR/.merge_lock_dir"
+MERGE_TIME=$(date "+%Y%m%d-%H%M%S")
+# if the lock dir is too old, may be something is wrong, delete it to free the lock
+lock_modtime=$(stat -c%Y $LOCK_DIR)
+lock_now=$(date +%s)
+lock_gap=`echo "$lock_now - $lock_modtime" | bc`
 
-MAX_WAIT_TIME=1800
+if [ $loc_gap -gt $MAX_LOCK_ALIVE_TIME ]; then # the lock dir is too old, delete it.
+  echo "$MERGE_TIME the lock is too old: $lock_modtime, now: $lock_now, gap: $lock_gap" >> $ALL_MERGED_DIR_RECORD
+  /bin/rm -rf $LOCK_DIR
+fi
+
+# if other processes are merging traces, exit.
+if ! /bin/mkdir $LOCK_DIR >/dev/null 2>&1; then
+  echo "$MERGE_TIME try merge file failed due to the lock" >> $ALL_MERGED_DIR_RECORD
+  exit 0
+fi
+
+
+BIN_DIR="$BIN_TMP_DIR"
+MAX_WAIT_TIME=1200
 
 TRACE_MERGE="$ACTIVEIP_STATDIR/tracemerge"
 [ -d "$BIN_DIR" ] || exit 0 
@@ -121,7 +144,6 @@ merge_traces()
 DIRS=$(ls $BIN_DIR)
 [ "$DIRS" ] || exit 0
 
-MERGE_TIME=$(date "+%Y%m%d-%H%M%S")
 while read BIN_TRACES_DIR
 do
   traces_dir=$BIN_DIR/$BIN_TRACES_DIR
@@ -133,13 +155,18 @@ do
     continue
   else
     #merge the traces in the directory
+
+    MERGE_TIME_BEFORE=$(date "+%Y%m%d-%H%M%S")
     merged_trace_base=$BIN_TRACES_DIR"-"$now
     merged_trace=$MERGED_BIN_DIR/$merged_trace_base
     #echo $BIN_TRACES_DIR $merged_trace $traces_dir
     merge_traces $merged_trace $traces_dir
-    echo $MERGE_TIME $BIN_TRACES_DIR $merged_trace >> $ALL_MERGED_DIR_RECORD
+    MERGE_TIME_AFTER=$(date "+%Y%m%d-%H%M%S")
+    echo $MERGE_TIME $MERGE_TIME_BEFORE $MERGE_TIME_AFTER $BIN_TRACES_DIR $merged_trace >> $ALL_MERGED_DIR_RECORD
+
     /bin/rm -rf $traces_dir
   fi
 done <<< "$(ls $BIN_DIR)"
 
+/bin/rm -rf $LOCK_DIR
 exit 0

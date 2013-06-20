@@ -1,36 +1,43 @@
 #!/bin/bash
-#compare_result=`echo "2.2 < 1.1" | bc`
-#echo $compare_result
-#if [ $compare_result -eq 1 ];then
-#  echo "hello"
-#fi
-#
-#if [ $compare_result -eq 0 ];then
-#  echo "world" 
+#trace="bin_tmp_data/landeri2/19691231-160000/20130528-053933-00738776-hcFaGEc"
+##trace="bin_tmp_data/landeri2/20130528-234500/20130529-064534-00741512-hcFaGEc"
+#./get_f_l_ts $trace
+#if [ "$?" == "0" ]; then
+#  echo "succ"
+#else
+#  echo "fail"
 #fi
 
-#TRACE_DIR="/home/zihu/Projects/project_code/Gloriad/bin_temp_data"
-#TRACE_DST_DIR="/home/zihu/Projects/project_code/Gloriad/bin_data"
-#MTRACE_FN=" erf:"$TRACE_DST_DIR"/test"
-#echo $MTRACE_FN
-#
-#
-#merge_traces()
-#{
-#  CMD_STR=""
-#  while read trace
-#  do
-#    CMD_STR=$CMD_STR" erf:"$TRACE_DIR/$trace
-#  done <<< "$(ls $TRACE_DIR)"
-#  echo $CMD_STR
-#  tracemerge $MTRACE_FN $CMD_STR
-#}
-#
-#merge_traces
 
-STR=$(ls test_dir)
-if [ -n "$STR" ]; then
-  echo "not empty"
-else
-  echo "empty"
+
+#trace="bin_tmp_data/landeri2/20130528-234500/20130529-064534-00741512-hcFaGEc"
+trace="bin_tmp_data/landeri2/19691231-160000/20130528-053933-00738776-hcFaGEc"
+# get start time and end time of the trace
+st_end_t=$(2>/dev/null ./get_f_l_ts "erf:$trace" )
+if [ "$?" != "0" ]; then 
+  exit 1
+fi
+
+TRACE_ST=$(echo $st_end_t | awk '{print $1}')
+TRACE_ET=$(echo $st_end_t | awk '{print $2}')
+
+bad_trace=`echo "$TRACE_ST < 0" | bc`
+if [ $bad_trace -eq 1 ];then
+  echo "bad trace 1" 
+fi
+
+#time now?
+N_TIME_S=$(date +%s)
+name="hello"
+echo $name"_$N_TIME_S"
+
+# two days?
+DAY_SEC=172800
+DIFF_DELAY=`echo "$N_TIME_S - $TRACE_ST" | bc`
+
+bad_trace=`echo "$DIFF_DELAY > $DAY_SEC" | bc`
+
+echo $TRACE_ST $TRACE_ET $DIFF_DELAY
+if [ $bad_trace -eq 1 ];then
+  echo "bad trace 2" 
 fi
