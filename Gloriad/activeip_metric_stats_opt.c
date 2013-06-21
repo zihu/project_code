@@ -149,7 +149,6 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
 
   //update dst -> source set
 
-  struct stat_info temp_record;
   unordered_map<unsigned long, stat_info>::iterator mit;
   //update src ip record;
   mit = ip_records.find(src);
@@ -167,6 +166,7 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
   }
   else
   {
+    struct stat_info temp_record;
     temp_record._srccount = 1;
     temp_record._dstcount = 0;
     temp_record._srcbytes = bytes;
@@ -197,6 +197,7 @@ void update_ip_records(unsigned long src, unsigned long dst, bool is_typsynack, 
   }
   else
   {
+    struct stat_info temp_record;
     temp_record._srccount = 0;
     temp_record._dstcount = 1;
     temp_record._srcbytes = 0;

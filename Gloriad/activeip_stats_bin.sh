@@ -129,6 +129,7 @@ PROCESS_TRACES="$ACTIVEIP_STATDIR/all_processed_bins.dat"
 process_bin()
 {
   S_TIME=$(date "+%Y%m%d-%H%M%S")
+  local s_t_s=$(date +%s)
   local bin_dir=$1
   local RSLT_OD="$ACTIVEIP_STATDIR/RSLT/$landername"
   [ -d "$RSLT_OD" ] || mkdir -p "$RSLT_OD"
@@ -159,8 +160,11 @@ process_bin()
     return 0
   fi
   E_TIME=$(date "+%Y%m%d-%H%M%S")
+  local e_t_s=$(date +%s)
+  local gap=`echo "$e_t_s - $s_t_s" | bc`
+
   #record all the traces processed and the processing time
-  echo $S_TIME $E_TIME $bin_dir >> $PROCESS_TRACES
+  echo $gap $S_TIME $E_TIME $bin_dir >> $PROCESS_TRACES
 
   #compress the result file
   cd $RSLT_OD && tar -zcf $RSLT_FN_GZ $RSLT_FN && /bin/rm -rf $RSLT_FN && cd -
@@ -197,7 +201,6 @@ do
   fi
   echo $INPUTFILE $BIN_TRACES_DIR "S">> $LOCK_LOG
 
- 
 
   inprocess_trace=$IN_PROCESS_DIR/$BIN_TRACES_DIR
   #check if the bin has all the necessary erf files

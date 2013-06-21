@@ -128,7 +128,10 @@ echo $S_TIME $E_TIME $INPUTFILE >> $ALL_TRACES_RECORD
 
 VINPUT_DIR="$ACTIVEIP_STATDIR/vinput_dir/$landername"
 [ -d "$VINPUT_DIR" ] || mkdir -p "$VINPUT_DIR"
-/bin/touch $VINPUT_DIR/$basename.txt
+file_count=$(ls $VINPUT_DIR | wc -l)
+if [ $file_count -lt 500 ];then
+  /bin/touch $VINPUT_DIR/$basename.txt
+fi
 
 
 # delete the error log if nothing bad happens
